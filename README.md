@@ -1,10 +1,10 @@
 # Optimism On-Chain Governance
 
-This repo conatins the code for the Optimism On-Chain Governance system.
+This repo contains the code for the Optimism On-Chain Governance system.
 
 ## Motivation
 
-Optimism is moving towards on-chain governance process. The initial version on the governance system is used for signling purposes only and is designed to be upgraded in the future.
+Optimism is moving towards on-chain governance process. The initial version of the governance system is used for signaling purposes only and is designed to be upgraded in the future.
 
 ## Overview
 
@@ -25,7 +25,7 @@ The contracts in this repo are designed to be used by the following roles:
 - **admin** is the top-level owner of the governance system. The admin address can only do the following:
 
   - Upgrade implementation to a new version
-  - Transfer admin role to a new address (inlcuding renouncing ownership)
+  - Transfer admin role to a new address (including renouncing ownership)
   - Can't have any other roles (i.e. can't be a manager and can't interact with the governance system in any other way)
 
 - **manager** address used in day-to-day operations of the governance system. The manager address has the following superpowers:
