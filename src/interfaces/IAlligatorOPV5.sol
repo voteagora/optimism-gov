@@ -3,71 +3,21 @@ pragma solidity 0.8.19;
 
 import {SubdelegationRules} from "../structs/RulesV3.sol";
 
-interface IAlligatorOPV5 {
+interface IAlligatorOPV6 {
     // =============================================================
     //                     GOVERNOR OPERATIONS
     // =============================================================
 
-    function castVote(address[] calldata authority, uint256 proposalId, uint8 support) external;
+    function castVote(uint256 proposalId, uint8 support) external;
 
-    function castVoteWithReason(address[] calldata authority, uint256 proposalId, uint8 support, string calldata reason)
+    function castVoteWithReason(uint256 proposalId, uint8 support, string calldata reason)
         external;
 
     function castVoteWithReasonAndParams(
-        address[] calldata authority,
         uint256 proposalId,
         uint8 support,
         string calldata reason,
         bytes memory params
-    ) external;
-
-    function castVoteWithReasonAndParamsBatched(
-        address[][] memory authorities,
-        uint256 proposalId,
-        uint8 support,
-        string calldata reason,
-        bytes memory params
-    ) external;
-
-    function limitedCastVoteWithReasonAndParamsBatched(
-        uint256 maxVotingPower,
-        address[][] memory authorities,
-        uint256 proposalId,
-        uint8 support,
-        string calldata reason,
-        bytes memory params
-    ) external;
-
-    function castVoteBySig(
-        address[] calldata authority,
-        uint256 proposalId,
-        uint8 support,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external;
-
-    function castVoteWithReasonAndParamsBySig(
-        address[] calldata authority,
-        uint256 proposalId,
-        uint8 support,
-        string calldata reason,
-        bytes memory params,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) external;
-
-    function limitedCastVoteWithReasonAndParamsBatchedBySig(
-        uint256 maxVotingPower,
-        address[][] memory authorities,
-        uint256 proposalId,
-        uint8 support,
-        string memory reason,
-        bytes memory params,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
     ) external;
 
     // =============================================================
@@ -89,6 +39,16 @@ interface IAlligatorOPV5 {
     // =============================================================
     //                         VIEW FUNCTIONS
     // =============================================================
+
+    /**
+     * @dev Returns the current amount of votes that `account` has.
+     */
+    function getVotes(address account) external view returns (uint256);
+
+    /**
+     * @dev Returns the amount of votes that `account` had at the end of a past block (`blockNumber`).
+     */
+    function getPastVotes(address account, uint256 blockNumber) external view returns (uint256);
 
     function proxyAddress(address owner) external view returns (address endpoint);
 

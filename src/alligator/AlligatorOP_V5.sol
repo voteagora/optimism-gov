@@ -80,6 +80,12 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
     // Subdelegation rules `from` => `to`
     mapping(address from => mapping(address to => SubdelegationRules subdelegationRules)) public subdelegations;
 
+    // Subdelegation keys `from` => `to`
+    mapping(address from => address[] to) public forwardSubdelegationKeys;
+
+    // Subdelegation rules `to` => `from`
+    mapping(address to => address[] from) public backwardSubdelegationKeys;
+
     mapping(address proxy => mapping(uint256 proposalId => mapping(address voter => uint256))) private UNUSED_SLOT;
 
     // Records of votes cast on `proposalId` by `delegate` with `proxy` voting power from those subdelegated by `delegator`.
@@ -112,96 +118,43 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
     /**
      * Validate subdelegation rules and cast a vote on the governor.
      *
-     * @param authority The authority chain to validate against.
      * @param proposalId The id of the proposal to vote on
      * @param support The support value for the vote. 0=against, 1=for, 2=abstain
      */
-    function castVote(address[] calldata authority, uint256 proposalId, uint8 support) public override whenNotPaused {
-        _castVoteWithReasonAndParams(msg.sender, authority, proposalId, support, "", "");
+    function castVote(uint256 proposalId, uint8 support) public override whenNotPaused {
+        _castVoteWithReasonAndParams(msg.sender, proposalId, support, "", "");
     }
 
     /**
      * Validate subdelegation rules and cast a vote with reason on the governor.
      *
-     * @param authority The authority chain to validate against.
      * @param proposalId The id of the proposal to vote on
      * @param support The support value for the vote. 0=against, 1=for, 2=abstain
      * @param reason The reason given for the vote by the voter
      */
-    function castVoteWithReason(address[] calldata authority, uint256 proposalId, uint8 support, string calldata reason)
+    function castVoteWithReason(uint256 proposalId, uint8 support, string calldata reason)
         public
         override
         whenNotPaused
     {
-        _castVoteWithReasonAndParams(msg.sender, authority, proposalId, support, reason, "");
+        _castVoteWithReasonAndParams(msg.sender, proposalId, support, reason, "");
     }
 
     /**
      * Validate subdelegation rules and cast a vote with reason on the governor.
      *
-     * @param authority The authority chain to validate against.
      * @param proposalId The id of the proposal to vote on
      * @param support The support value for the vote. 0=against, 1=for, 2=abstain
      * @param reason The reason given for the vote by the voter
      * @param params The custom params of the vote
      */
     function castVoteWithReasonAndParams(
-        address[] calldata authority,
         uint256 proposalId,
         uint8 support,
         string memory reason,
         bytes memory params
     ) public override whenNotPaused {
-        _castVoteWithReasonAndParams(msg.sender, authority, proposalId, support, reason, params);
-    }
-
-    /**
-     * Validate subdelegation rules and cast multiple votes with reason on the governor.
-     *
-     * @param authorities The authority chains to validate against.
-     * @param proposalId The id of the proposal to vote on
-     * @param support The support value for the vote. 0=against, 1=for, 2=abstain
-     * @param reason The reason given for the vote by the voter
-     * @param params The custom params of the vote
-     *
-     * @dev Authority chains with 0 votes to cast are skipped instead of triggering a revert.
-     */
-    function castVoteWithReasonAndParamsBatched(
-        address[][] memory authorities,
-        uint256 proposalId,
-        uint8 support,
-        string memory reason,
-        bytes memory params
-    ) public override whenNotPaused {
-        _limitedCastVoteWithReasonAndParamsBatched(
-            msg.sender, type(uint256).max, authorities, proposalId, support, reason, params
-        );
-    }
-
-    /**
-     * Validate subdelegation rules and cast multiple votes with reason on the governor.
-     * Limits the max number of votes used to `maxVotingPower`, blocking iterations once reached.
-     *
-     * @param maxVotingPower The maximum voting power allowed to be used for the batchVote
-     * @param authorities The authority chains to validate against.
-     * @param proposalId The id of the proposal to vote on
-     * @param support The support value for the vote. 0=against, 1=for, 2=abstain
-     * @param reason The reason given for the vote by the voter
-     * @param params The custom params of the vote
-     *
-     * @dev Authority chains with 0 votes to cast are skipped instead of triggering a revert.
-     */
-    function limitedCastVoteWithReasonAndParamsBatched(
-        uint256 maxVotingPower,
-        address[][] memory authorities,
-        uint256 proposalId,
-        uint8 support,
-        string memory reason,
-        bytes memory params
-    ) public override whenNotPaused {
-        _limitedCastVoteWithReasonAndParamsBatched(
-            msg.sender, maxVotingPower, authorities, proposalId, support, reason, params
-        );
+        _castVoteWithReasonAndParams(msg.sender, proposalId, support, reason, params);
     }
 
     /**
@@ -212,7 +165,6 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
      * @param support The support value for the vote. 0=against, 1=for, 2=abstain
      */
     function castVoteBySig(
-        address[] calldata authority,
         uint256 proposalId,
         uint8 support,
         uint8 v,
@@ -220,9 +172,9 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
         bytes32 s
     ) public override whenNotPaused {
         address signatory =
-            _getSignatory(keccak256(abi.encode(BALLOT_TYPEHASH, proposalId, support, authority)), v, r, s);
+            _getSignatory(keccak256(abi.encode(BALLOT_TYPEHASH, proposalId, support)), v, r, s);
 
-        _castVoteWithReasonAndParams(signatory, authority, proposalId, support, "", "");
+        _castVoteWithReasonAndParams(signatory, proposalId, support, "", "");
     }
 
     /**
@@ -235,7 +187,6 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
      * @param params The custom params of the vote
      */
     function castVoteWithReasonAndParamsBySig(
-        address[] calldata authority,
         uint256 proposalId,
         uint8 support,
         string memory reason,
@@ -250,7 +201,6 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
                     BALLOT_WITHPARAMS_TYPEHASH,
                     proposalId,
                     support,
-                    authority,
                     keccak256(bytes(reason)),
                     keccak256(params)
                 )
@@ -260,57 +210,13 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
             s
         );
 
-        _castVoteWithReasonAndParams(signatory, authority, proposalId, support, reason, params);
-    }
-
-    /**
-     * Validate subdelegation rules and cast a vote with reason and params by signature on the governor.
-     *
-     * @param maxVotingPower The maximum voting power allowed to be used for the batchVote
-     * @param authorities The authority chains to validate against.
-     * @param proposalId The id of the proposal to vote on
-     * @param support The support value for the vote. 0=against, 1=for, 2=abstain
-     * @param reason The reason given for the vote by the signatory
-     * @param params The custom params of the vote
-     */
-    function limitedCastVoteWithReasonAndParamsBatchedBySig(
-        uint256 maxVotingPower,
-        address[][] memory authorities,
-        uint256 proposalId,
-        uint8 support,
-        string memory reason,
-        bytes memory params,
-        uint8 v,
-        bytes32 r,
-        bytes32 s
-    ) public override whenNotPaused {
-        address signatory = _getSignatory(
-            keccak256(
-                abi.encode(
-                    BALLOT_WITHPARAMS_BATCHED_TYPEHASH,
-                    proposalId,
-                    support,
-                    maxVotingPower,
-                    authorities,
-                    keccak256(bytes(reason)),
-                    keccak256(params)
-                )
-            ),
-            v,
-            r,
-            s
-        );
-
-        _limitedCastVoteWithReasonAndParamsBatched(
-            signatory, maxVotingPower, authorities, proposalId, support, reason, params
-        );
+        _castVoteWithReasonAndParams(signatory, proposalId, support, reason, params);
     }
 
     /**
      * Validate subdelegation rules and cast a vote with reason on the governor.
      *
      * @param voter The address of the voter
-     * @param authority The authority chain to validate against.
      * @param proposalId The id of the proposal to vote on
      * @param support The support value for the vote. 0=against, 1=for, 2=abstain
      * @param reason The reason given for the vote by the voter
@@ -320,84 +226,120 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
      */
     function _castVoteWithReasonAndParams(
         address voter,
-        address[] calldata authority,
-        uint256 proposalId,
-        uint8 support,
-        string memory reason,
-        bytes memory params
-    ) internal {
-        address proxy = proxyAddress(authority[0]);
-        uint256 proxyTotalVotes = IVotes(OP_TOKEN).getPastVotes(proxy, _proposalSnapshot(proposalId));
-
-        (uint256 votesToCast, uint256 k) = validate(proxy, voter, authority, proposalId, support, proxyTotalVotes);
-
-        if (votesToCast == 0) revert ZeroVotesToCast();
-
-        _recordVotesToCast(k, proxy, proposalId, authority, votesToCast, proxyTotalVotes);
-        _castVote(voter, proposalId, support, reason, votesToCast, params);
-
-        emit VoteCast(proxy, voter, authority, proposalId, support);
-    }
-
-    /**
-     * Validate subdelegation rules and cast multiple votes with reason on the governor.
-     * Limits the max number of votes used to `maxVotingPower`, blocking iterations once reached.
-     *
-     * @param voter The address of the voter
-     * @param maxVotingPower The maximum voting power allowed to be used for the batchVote
-     * @param authorities The authority chains to validate against.
-     * @param proposalId The id of the proposal to vote on
-     * @param support The support value for the vote. 0=against, 1=for, 2=abstain
-     * @param reason The reason given for the vote by the voter
-     * @param params The custom params of the vote
-     *
-     * @dev Authority chains with 0 votes to cast are skipped instead of triggering a revert.
-     */
-    function _limitedCastVoteWithReasonAndParamsBatched(
-        address voter,
-        uint256 maxVotingPower,
-        address[][] memory authorities,
         uint256 proposalId,
         uint8 support,
         string memory reason,
         bytes memory params
     ) internal {
         uint256 snapshotBlock = _proposalSnapshot(proposalId);
-        address[] memory proxies = new address[](authorities.length);
-        uint256 votesToCast;
-        uint256 totalVotesToCast;
-        uint256 proxyTotalVotes;
-        uint256 k;
-        for (uint256 i; i < authorities.length;) {
-            proxies[i] = proxyAddress(authorities[i][0]);
-            proxyTotalVotes = IVotes(OP_TOKEN).getPastVotes(proxies[i], snapshotBlock);
+        
+        // Calculate voting power
+        uint256 votingPower = _getVotingPowerForVoter(voter, snapshotBlock);
 
-            (votesToCast, k) = validate(proxies[i], voter, authorities[i], proposalId, support, proxyTotalVotes);
+        // Drain proxies
+        _drainProxies(voter, votingPower);
 
-            if (votesToCast != 0) {
-                // Increase `totalVotesToCast` and check if it exceeds `maxVotingPower`
-                if ((totalVotesToCast += votesToCast) < maxVotingPower) {
-                    _recordVotesToCast(k, proxies[i], proposalId, authorities[i], votesToCast, proxyTotalVotes);
-                } else {
-                    // If `totalVotesToCast` exceeds `maxVotingPower`, calculate the remaining votes to cast
-                    votesToCast = maxVotingPower - (totalVotesToCast - votesToCast);
-                    _recordVotesToCast(k, proxies[i], proposalId, authorities[i], votesToCast, proxyTotalVotes);
-                    totalVotesToCast = maxVotingPower;
+        _castVote(voter, proposalId, support, reason, votingPower, params);
+    }
 
-                    break;
-                }
-            }
+    function _getVotingPowerForVoter(address voter, uint256 snapshotBlock) internal view returns(uint256 votingPower) {
+        // Init voting power with the voter's proxy voting power
+        votingPower = IVotes(OP_TOKEN).getPastVotes(proxyAddress(voter), snapshotBlock);
 
-            unchecked {
-                ++i;
+        // Step 1: Caclulate total subdlegations from voter
+        // TODO: Figure out how to apply rules. Eg. maxRedelgations
+        uint256 subdelegatedShares = 0;
+        uint256 subdelegatedAmount = 0;
+        for (uint256 i = 0; i < forwardSubdelegationKeys[sender]; ++i) {
+            if (forwardSubdelegationKeys[sender][i].allowanceType == AllowanceType.Relative) {
+                subdelegatedShares += forwardSubdelegationKeys[sender][i].allowance;
+            } else {
+                subdelegatedAmount += forwardSubdelegationKeys[sender][i].allowance;
             }
         }
 
-        if (totalVotesToCast == 0) revert ZeroVotesToCast();
+        // If subdelegatedShare is greater than 100%, then voter has no remaining votingPower
+        if (subdelegatedShares >= 1e5) {
+            // Return direct voting power
+            return IVotes(OP_TOKEN).getPastVotes(voter, snapshotBlock);
+        }
 
-        _castVote(voter, proposalId, support, reason, totalVotesToCast, params);
+        // Step 2 Calculate voting power from chains
+        _buildChainsAndCalculateVotingPower(voter, ZeroAddress(), votingPower);
 
-        emit VotesCast(proxies, voter, authorities, proposalId, support);
+        // Step 3: Subtract subdelegatedAmount & subdelegatedShare from voterAllowance
+        votingPower = votingPower * (1e5 - subdelegatedShares) / 1e5;
+        if (votingPower < subdelegatedAmount) {
+            // Return direct voting power
+            return IVotes(OP_TOKEN).getPastVotes(voter, snapshotBlock);
+        }
+
+        return votingPower - subdelegatedAmount;
+    }
+
+    function _buildChainsAndCalculateVotingPower(address current, address previous, uint256 availableVotes, uint256 blockNumber) internal {
+
+        // TODO: This function does not check for double dipping. A delegate appearing in multiple chains will have their balance counted multiple times
+        // Potentially, we can
+        // 1. Use a mapping to keep track of the delegates that have already been counted and then clear the mapping after the function is done
+        //      - However, this would require a lot of gas & will not work for view functions
+        // 2. ???
+
+
+        // TODO: Check for circular delegation
+        // TODO: Should we allow for circular delegation?
+        // TODO: Should we limit the length of the chain?     
+
+        // Continue building the chain recursively
+        for (uint i = 0; i < backwardSubdelegationKeys[current].length; i++) {
+            // Skip if subdelegation allowance is 0
+            SubdelegationRules subdelegationRules = subdelegations[current][backwardSubdelegationKeys[current][i]];
+            if (subdelegationRules.allowance != 0) {
+                _buildChainsAndCalculateVotingPower(backwardSubdelegationKeys[current][i], current, availableVotes);
+            }
+        }
+
+        // Apply rules and calculate voting power for each delegate in the chain
+        if (previous != ZeroAddress()) {
+            // Apply rules and calculate voting power
+            SubdelegationRules previousRules = subdelegations[previous][current];
+            _validateAndApplyRules(previous, previousRules, availableVotes, blockNumber);
+            return;
+        }  
+    }
+
+    function _validateAndApplyRules(address from, SubdelegationRules rules, uint256 balance) {
+        if (rules.allowance == 0) {
+            return 0;
+        }
+
+        uint265 proxyBalance = IVotes(OP_TOKEN).getPastVotes(proxyAddress(from), blockNumber);
+
+        // Calculate `voterAllowance` based on allowance given by `from`
+        return _getVoterAllowance(rules.allowanceType, rules.allowance, balance + proxyBalance);
+    }
+
+    // Draining proxies starting from the closest to the voter
+    function _drainProxies(address current, uint265 remainingBalance) internal {
+        if (remainingBalance == 0) {
+            return;
+        }
+
+        // Check subdelegations and drain allowance
+        for (uint i = 0; i < backwardSubdelegationKeys[current].length; i++) {
+            // Skip if subdelegation allowance is 0
+            SubdelegationRules subdelegationRules = subdelegations[current][backwardSubdelegationKeys[current][i]];
+            if (subdelegationRules.allowance != 0) {
+                uint256 allowance = _getVoterAllowance(subdelegationRules.allowanceType, subdelegationRules.allowance, remainingBalance);
+                remainingBalance -= allowance;
+
+                // record votes cast from proxy
+                votesCast[proxy][proposalId][delegator][delegator = from] += allowance;
+
+                _drainProxies(backwardSubdelegationKeys[current][i], remainingBalance - allowance);
+            }
+        }
+
     }
 
     function _recordVotesToCast(
@@ -467,6 +409,8 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
      */
     function subdelegate(address to, SubdelegationRules calldata subdelegationRules) public override whenNotPaused {
         subdelegations[msg.sender][to] = subdelegationRules;
+        _addToSubdelegationKeys(msg.sender, to);
+
         emit SubDelegation(msg.sender, to, subdelegationRules);
     }
 
@@ -484,6 +428,7 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
         uint256 targetsLength = targets.length;
         for (uint256 i; i < targetsLength;) {
             subdelegations[msg.sender][targets[i]] = subdelegationRules;
+            _addToSubdelegationKeys(msg.sender, targets[i]);
 
             unchecked {
                 ++i;
@@ -509,6 +454,7 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
 
         for (uint256 i; i < targetsLength;) {
             subdelegations[msg.sender][targets[i]] = subdelegationRules[i];
+            _addToSubdelegationKeys(msg.sender, targets[i]);
 
             unchecked {
                 ++i;
@@ -518,101 +464,54 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
         emit SubDelegations(msg.sender, targets, subdelegationRules);
     }
 
+    function _addToSubdelegationKeys(address from, address to) internal {
+        // Check if subdelegationKeys exists to avoid duplicates
+        if (backwardSubdelegationKeys[from].length == 0) {
+            backwardSubdelegationKeys[from].push(to);
+        } else {
+            // Check if the address is already in the array
+            bool found = false;
+            for (uint256 i = 0; i < backwardSubdelegationKeys[from].length; i++) {
+                if (backwardSubdelegationKeys[from][i] == to) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                backwardSubdelegationKeys[from].push(to);
+            }
+        }
+
+        // Do the same for forwardSubdelegationKeys
+        if (forwardSubdelegationKeys[to].length == 0) {
+            forwardSubdelegationKeys[to].push(from);
+        } else {
+            bool found = false;
+            for (uint256 i = 0; i < forwardSubdelegationKeys[to].length; i++) {
+                if (forwardSubdelegationKeys[to][i] == from) {
+                    found = true;
+                    break;
+                }
+            }
+            if (!found) {
+                forwardSubdelegationKeys[to].push(from);
+            }
+        }
+    }
+
     // =============================================================
     //                         VIEW FUNCTIONS
     // =============================================================
 
     /**
-     * Validate subdelegation rules and partial delegation allowances.
+     * Returns the current amount of votes that `account` has.
      *
-     * @param proxy The address of the proxy.
-     * @param sender The sender address to validate.
-     * @param authority The authority chain to validate against.
-     * @param proposalId The id of the proposal for which validation is being performed.
-     * @param support The support value for the vote. 0=against, 1=for, 2=abstain, 0xFF=proposal
-     * @param voterAllowance The allowance of the voter.
-     *
-     * @return votesToCast The number of votes to cast by `sender`.
-     */
-    function validate(
-        address proxy,
-        address sender,
-        address[] memory authority,
-        uint256 proposalId,
-        uint256 support,
-        uint256 voterAllowance
-    ) internal view returns (uint256 votesToCast, uint256 k) {
-        address from = authority[0];
-
-        /// @dev Cannot underflow as `weightCast` is always less than or equal to total votes.
-        unchecked {
-            uint256 weightCast = _weightCast(proposalId, proxy);
-            votesToCast = weightCast == 0 ? voterAllowance : voterAllowance - weightCast;
-        }
-
-        // If `sender` is the proxy owner, only the proxy rules are validated.
-        if (from == sender) {
-            return (votesToCast, k);
-        }
-
-        uint256 delegatorsVotes;
-        uint256 toVotesCast;
-        address to;
-        SubdelegationRules memory subdelegationRules;
-        for (uint256 i = 1; i < authority.length;) {
-            to = authority[i];
-
-            subdelegationRules = subdelegations[from][to];
-
-            if (subdelegationRules.allowance == 0) {
-                revert NotDelegated(from, to);
-            }
-
-            // Calculate `voterAllowance` based on allowance given by `from`
-            voterAllowance =
-                _getVoterAllowance(subdelegationRules.allowanceType, subdelegationRules.allowance, voterAllowance);
-
-            // Record the highest `delegatorsVotes` in the authority chain
-            toVotesCast = votesCast[proxy][proposalId][from][to];
-            if (toVotesCast > delegatorsVotes) {
-                delegatorsVotes = toVotesCast;
-            }
-
-            // If subdelegation allowance is lower than proxy remaining votes, record the point in the authority chain
-            // after which we need to keep track of votes cast.
-            if (k == 0) {
-                if (
-                    subdelegationRules.allowance
-                        < (subdelegationRules.allowanceType == AllowanceType.Relative ? 1e5 : votesToCast)
-                ) {
-                    k = i;
-                }
-            }
-
-            unchecked {
-                _validateRules(
-                    subdelegationRules,
-                    sender,
-                    authority.length,
-                    proposalId,
-                    support,
-                    from,
-                    to,
-                    ++i // pass `i + 1` and increment at the same time
-                );
-            }
-
-            from = to;
-        }
-
-        if (from != sender) revert NotDelegated(from, sender);
-        // Prevent double spending of votes already cast by previous delegators.
-        // Reverts for underflow when `delegatorsVotes > voterAllowance`, meaning that `sender` has no votes left.
-        if (delegatorsVotes != 0) {
-            voterAllowance -= delegatorsVotes;
-        }
-
-        votesToCast = voterAllowance > votesToCast ? votesToCast : voterAllowance;
+     * @param account The address of the account to check
+     * @param blockNumber The block number to check
+     * @return The current amount of votes that `account` has
+    */
+    function getVotes(address account, uint256 blockNumber) public view override returns (uint256) {
+        return _getVotingPowerForVoter(account, blockNumber);
     }
 
     /**
