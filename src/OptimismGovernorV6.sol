@@ -139,6 +139,11 @@ contract OptimismGovernorV6 is OptimismGovernorV5 {
         // Skip `totalWeight` check and count `votes`
         ProposalVote storage proposalVote = _proposalVotes[proposalId];
 
+        if (!proposalVote.hasVoted[voter]) {
+            proposalVote.hasVoted[voter] = true;
+            votes += _getVotes(voter, _proposals[proposalId].voteStart.getDeadline(), "");
+        }
+
         if (support == uint8(VoteType.Against)) {
             proposalVote.againstVotes += votes;
         } else if (support == uint8(VoteType.For)) {
