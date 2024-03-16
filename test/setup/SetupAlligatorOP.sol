@@ -102,6 +102,11 @@ abstract contract SetupAlligatorOP is Test {
     uint256 proposalId;
     address signer = vm.rememberKey(vm.envUint("SIGNER_KEY"));
 
+    struct ReducedSubdelegationRules {
+        AllowanceType allowanceType;
+        uint256 allowance;
+    }
+
     // =============================================================
     //                             SETUP
     // =============================================================

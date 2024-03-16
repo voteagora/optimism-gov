@@ -82,12 +82,20 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
 
     mapping(address proxy => mapping(uint256 proposalId => mapping(address voter => uint256))) private UNUSED_SLOT;
 
-    // Records of votes cast on `proposalId` by `delegate` with `proxy` voting power from those subdelegated by `delegator`.
-    // Used to prevent double voting from the same proxy and authority chain.
+    // Records allowance of `delegator` used by `delegate` to vote on `proposalId` using `proxy`'s voting power
+    // Used to prevent double voting with absolute allowances.
     mapping(
         address proxy
             => mapping(uint256 proposalId => mapping(address delegator => mapping(address delegate => uint256)))
     ) public votesCast;
+    // Records votes cast by `delegate` using `authorityChainHash` to vote on `proposalId` using `proxy`'s voting power
+    // Used to prevent double voting with relative allowances.
+    mapping(
+        address proxy
+            => mapping(
+                uint256 proposalId => mapping(bytes32 authorityChainHash => mapping(address delegate => uint256))
+            )
+    ) public votesCastByAuthorityChain;
 
     // =============================================================
     //                         CONSTRUCTOR
@@ -167,7 +175,7 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
      * @dev Authority chains with 0 votes to cast are skipped instead of triggering a revert.
      */
     function castVoteWithReasonAndParamsBatched(
-        address[][] memory authorities,
+        address[][] calldata authorities,
         uint256 proposalId,
         uint8 support,
         string memory reason,
@@ -193,7 +201,7 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
      */
     function limitedCastVoteWithReasonAndParamsBatched(
         uint256 maxVotingPower,
-        address[][] memory authorities,
+        address[][] calldata authorities,
         uint256 proposalId,
         uint8 support,
         string memory reason,
@@ -275,7 +283,7 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
      */
     function limitedCastVoteWithReasonAndParamsBatchedBySig(
         uint256 maxVotingPower,
-        address[][] memory authorities,
+        address[][] calldata authorities,
         uint256 proposalId,
         uint8 support,
         string memory reason,
@@ -329,11 +337,11 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
         address proxy = proxyAddress(authority[0]);
         uint256 proxyTotalVotes = IVotes(OP_TOKEN).getPastVotes(proxy, _proposalSnapshot(proposalId));
 
-        (uint256 votesToCast, uint256 k) = validate(proxy, voter, authority, proposalId, support, proxyTotalVotes);
+        (uint256 votesToCast) = validate(proxy, voter, authority, proposalId, support, proxyTotalVotes);
 
         if (votesToCast == 0) revert ZeroVotesToCast();
 
-        _recordVotesToCast(k, proxy, proposalId, authority, votesToCast, proxyTotalVotes);
+        _recordVotesToCast(proxy, proposalId, authority, votesToCast, proxyTotalVotes);
         _castVote(voter, proposalId, support, reason, votesToCast, params);
 
         emit VoteCast(proxy, voter, authority, proposalId, support);
@@ -356,7 +364,7 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
     function _limitedCastVoteWithReasonAndParamsBatched(
         address voter,
         uint256 maxVotingPower,
-        address[][] memory authorities,
+        address[][] calldata authorities,
         uint256 proposalId,
         uint8 support,
         string memory reason,
@@ -367,21 +375,20 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
         uint256 votesToCast;
         uint256 totalVotesToCast;
         uint256 proxyTotalVotes;
-        uint256 k;
         for (uint256 i; i < authorities.length;) {
             proxies[i] = proxyAddress(authorities[i][0]);
             proxyTotalVotes = IVotes(OP_TOKEN).getPastVotes(proxies[i], snapshotBlock);
 
-            (votesToCast, k) = validate(proxies[i], voter, authorities[i], proposalId, support, proxyTotalVotes);
+            (votesToCast) = validate(proxies[i], voter, authorities[i], proposalId, support, proxyTotalVotes);
 
             if (votesToCast != 0) {
                 // Increase `totalVotesToCast` and check if it exceeds `maxVotingPower`
                 if ((totalVotesToCast += votesToCast) < maxVotingPower) {
-                    _recordVotesToCast(k, proxies[i], proposalId, authorities[i], votesToCast, proxyTotalVotes);
+                    _recordVotesToCast(proxies[i], proposalId, authorities[i], votesToCast, proxyTotalVotes);
                 } else {
                     // If `totalVotesToCast` exceeds `maxVotingPower`, calculate the remaining votes to cast
                     votesToCast = maxVotingPower - (totalVotesToCast - votesToCast);
-                    _recordVotesToCast(k, proxies[i], proposalId, authorities[i], votesToCast, proxyTotalVotes);
+                    _recordVotesToCast(proxies[i], proposalId, authorities[i], votesToCast, proxyTotalVotes);
                     totalVotesToCast = maxVotingPower;
 
                     break;
@@ -401,31 +408,29 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
     }
 
     function _recordVotesToCast(
-        uint256 k,
         address proxy,
         uint256 proposalId,
-        address[] memory authority,
+        address[] calldata authority,
         uint256 votesToCast,
         uint256 proxyTotalVotes
     ) internal {
         // Record weight cast for a proxy, on the governor
         IOptimismGovernor(GOVERNOR).increaseWeightCast(proposalId, proxy, votesToCast, proxyTotalVotes);
 
-        // Record `votesToCast` across the authority chain, only for voters whose allowance does not exceed proxy
-        // remaining votes. This is because it would be unnecessary to do so as if they voted they would exhaust the
-        // proxy votes regardless of votes cast by their delegates.
-        if (k != 0) {
-            /// @dev `k - 1` cannot underflow as `k` is always greater than 0
-            /// @dev cumulative votesCast cannot exceed proxy voting power, thus cannot overflow
-            unchecked {
-                address delegator = authority[k - 1];
-                uint256 authorityLength = authority.length;
+        // Record `votesToCast` across the authority chain
 
-                for (k; k < authorityLength;) {
-                    votesCast[proxy][proposalId][delegator][delegator = authority[k]] += votesToCast;
+        /// @dev cumulative votesCast cannot exceed proxy voting power, thus cannot overflow
+        unchecked {
+            address delegator = authority[0];
+            uint256 authorityLength = authority.length;
 
-                    ++k;
-                }
+            for (uint256 i = 1; i < authorityLength;) {
+                // We save votesCast twice to always have the correct values for absolute and relative allowances
+                votesCastByAuthorityChain[proxy][proposalId][keccak256(abi.encode(authority[0:i]))][authority[i]] +=
+                    votesToCast;
+                votesCast[proxy][proposalId][delegator][delegator = authority[i]] += votesToCast;
+
+                ++i;
             }
         }
     }
@@ -537,11 +542,11 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
     function validate(
         address proxy,
         address sender,
-        address[] memory authority,
+        address[] calldata authority,
         uint256 proposalId,
         uint256 support,
         uint256 voterAllowance
-    ) internal view returns (uint256 votesToCast, uint256 k) {
+    ) internal view returns (uint256 votesToCast) {
         address from = authority[0];
 
         /// @dev Cannot underflow as `weightCast` is always less than or equal to total votes.
@@ -552,13 +557,12 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
 
         // If `sender` is the proxy owner, only the proxy rules are validated.
         if (from == sender) {
-            return (votesToCast, k);
+            return (votesToCast);
         }
 
-        uint256 delegatorsVotes;
-        uint256 toVotesCast;
         address to;
         SubdelegationRules memory subdelegationRules;
+        uint256 votesCastFactor;
         for (uint256 i = 1; i < authority.length;) {
             to = authority[i];
 
@@ -568,26 +572,33 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
                 revert NotDelegated(from, to);
             }
 
+            // Prevent double spending of votes already cast by previous delegators by adjusting `subdelegationRules.allowance`.
+            if (subdelegationRules.allowanceType == AllowanceType.Relative) {
+                // `votesCastFactor`: remaining votes to cast by the delegate
+                // Get `votesCastFactor` by subtracting `votesCastByAuthorityChain` to given allowance amount
+                // Reverts for underflow when `votesCastByAuthorityChain > votesCastFactor`, when delegate has exceeded the allowance.
+                votesCastFactor = subdelegationRules.allowance * voterAllowance / 1e5
+                    - votesCastByAuthorityChain[proxy][proposalId][keccak256(abi.encode(authority[0:i]))][to];
+
+                // Adjust `votesToCast` to the minimum between `votesCastFactor` and `votesToCast`
+                if (votesCastFactor < votesToCast) {
+                    votesToCast = votesCastFactor;
+                }
+            } else {
+                // `votesCastFactor`: total votes cast by the delegate
+                // Retrieve votes cast by `to` via `from` regardless of the used authority chain
+                votesCastFactor = votesCast[proxy][proposalId][from][to];
+
+                // Adjust allowance by subtracting eventual votes already cast by the delegate
+                // Reverts for underflow when `votesCastFactor > voterAllowance`, when delegate has exceeded the allowance.
+                if (votesCastFactor != 0) {
+                    subdelegationRules.allowance = subdelegationRules.allowance - votesCastFactor;
+                }
+            }
+
             // Calculate `voterAllowance` based on allowance given by `from`
             voterAllowance =
                 _getVoterAllowance(subdelegationRules.allowanceType, subdelegationRules.allowance, voterAllowance);
-
-            // Record the highest `delegatorsVotes` in the authority chain
-            toVotesCast = votesCast[proxy][proposalId][from][to];
-            if (toVotesCast > delegatorsVotes) {
-                delegatorsVotes = toVotesCast;
-            }
-
-            // If subdelegation allowance is lower than proxy remaining votes, record the point in the authority chain
-            // after which we need to keep track of votes cast.
-            if (k == 0) {
-                if (
-                    subdelegationRules.allowance
-                        < (subdelegationRules.allowanceType == AllowanceType.Relative ? 1e5 : votesToCast)
-                ) {
-                    k = i;
-                }
-            }
 
             unchecked {
                 _validateRules(
@@ -606,11 +617,6 @@ contract AlligatorOPV5 is IAlligatorOPV5, UUPSUpgradeable, OwnableUpgradeable, P
         }
 
         if (from != sender) revert NotDelegated(from, sender);
-        // Prevent double spending of votes already cast by previous delegators.
-        // Reverts for underflow when `delegatorsVotes > voterAllowance`, meaning that `sender` has no votes left.
-        if (delegatorsVotes != 0) {
-            voterAllowance -= delegatorsVotes;
-        }
 
         votesToCast = voterAllowance > votesToCast ? votesToCast : voterAllowance;
     }
