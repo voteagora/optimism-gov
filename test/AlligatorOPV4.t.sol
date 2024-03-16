@@ -29,6 +29,32 @@ contract AlligatorOPV4Test is AlligatorOPTest {
 
     function testCreate() public override {}
 
+    function testCastVoteTwice() public virtual {
+        address[] memory authority2 = new address[](2);
+        authority2[0] = Utils.alice;
+        authority2[1] = address(this);
+
+        vm.prank(Utils.alice);
+        _subdelegate(Utils.alice, baseRules, address(this), subdelegationRules);
+
+        standardCastVote(authority2);
+
+        (, uint256 forVotes,) = GovernorCountingSimpleUpgradeableV2(governor).proposalVotes(proposalId);
+        assertEq(forVotes, 50e18);
+
+        vm.prank(Utils.alice);
+        subdelegationRules = SubdelegationRules({
+            baseRules: baseRules,
+            allowanceType: AllowanceType.Relative,
+            allowance: 7.5e4 // 75%
+        });
+        _subdelegate(Utils.alice, baseRules, address(this), subdelegationRules);
+        standardCastVote(authority2);
+
+        (, forVotes,) = GovernorCountingSimpleUpgradeableV2(governor).proposalVotes(proposalId);
+        assertEq(forVotes, 75e18);
+    }
+
     function testSubdelegate() public virtual override {
         _subdelegate(address(this), baseRules, Utils.alice, subdelegationRules);
 

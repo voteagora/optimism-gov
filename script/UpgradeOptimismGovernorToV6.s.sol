@@ -23,8 +23,8 @@ contract UpgradeOptimismGovernorToV6Script is Script {
     OptimisticModule_SocialSignalling optimisticSocialModule =
         OptimisticModule_SocialSignalling(0x27964c5f4F389B8399036e1076d84c6984576C33);
     VotableSupplyOracle votableSupplyOracle = VotableSupplyOracle(0x1b7CA7437748375302bAA8954A2447fC3FBE44CC);
-    AlligatorOPV5 alligatorV5Impl = AlligatorOPV5(0xD89eb37D3e643aab97258C62BcF704CD00761af6);
-    AlligatorOPV5 alligatorV5 = AlligatorOPV5(0x7f08F3095530B67CdF8466B7a923607944136Df0);
+    AlligatorOPV5 alligatorV5Impl = AlligatorOPV5(0x1C3C0e1f91541656FF709014CE3B296E61CE7FF6);
+    AlligatorOPV5 alligatorV5 = AlligatorOPV5(0xfD6be5F4253Aa9fBB46B2BFacf9aa6F89822f4a6);
 
     // Prod environment addresses
     // TransparentUpgradeableProxy proxy = TransparentUpgradeableProxy(payable(0xcDF27F107725988f2261Ce2256bDfCdE8B382B10));
@@ -39,12 +39,12 @@ contract UpgradeOptimismGovernorToV6Script is Script {
 
     function run() public 
     // returns (
-    //     OptimismGovernorV6 implementation
-    // VotableSupplyOracle votableSupplyOracle,
-    // ProposalTypesConfigurator proposalTypesConfigurator
-    //     AlligatorOPV5 alligator,
-    //     ApprovalVotingModule approvalModule
-    // OptimisticModule_SocialSignalling optimisticSocialModule
+    //      OptimismGovernorV6_Manageable implementation,
+    //      VotableSupplyOracle votableSupplyOracle,
+    //      ProposalTypesConfigurator proposalTypesConfigurator
+    //      AlligatorOPV5 alligator,
+    //      ApprovalVotingModule approvalModule
+    //      OptimisticModule_SocialSignalling optimisticSocialModule
     // )
     {
         address deployer = vm.rememberKey(vm.envUint("DEPLOYER_KEY"));
@@ -85,7 +85,7 @@ contract UpgradeOptimismGovernorToV6Script is Script {
         // (only on test env) Set correct governor address in `Alligator`
 
         // Pt. 5 Upgrade governor
-        // implementation = new OptimismGovernorV6();
+        // implementation = new OptimismGovernorV6_Manageable();
         // proxy.upgradeTo(address(implementation));
 
         vm.stopBroadcast();

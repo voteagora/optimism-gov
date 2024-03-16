@@ -6,6 +6,7 @@ import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {IERC721} from "@openzeppelin/contracts/interfaces/IERC721.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {AlligatorOP} from "src/alligator/AlligatorOP.sol";
+import {GovernorCountingSimpleUpgradeableV2} from "src/lib/openzeppelin/v2/GovernorCountingSimpleUpgradeableV2.sol";
 
 contract AlligatorOPTest is SetupAlligatorOP {
     function setUp() public virtual override {
@@ -456,7 +457,13 @@ contract AlligatorOPTest is SetupAlligatorOP {
 
     function standardCastVote(address[] memory authority) public virtual {
         vm.expectEmit();
-        emit VoteCast(_proxyAddress(authority[0], baseRules, baseRulesHash), address(this), authority, proposalId, 1);
+        emit VoteCast(
+            _proxyAddress(authority[0], baseRules, baseRulesHash),
+            authority[authority.length - 1],
+            authority,
+            proposalId,
+            1
+        );
         _castVote(baseRules, baseRulesHash, authority, proposalId, 1);
     }
 

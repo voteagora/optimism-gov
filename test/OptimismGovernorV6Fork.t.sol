@@ -38,30 +38,38 @@ contract OptimismGovernorV6UpgradeTest is Test {
     OptimismGovernorV6 internal governor = OptimismGovernorV6(payable(proxy));
 
     function setUp() public {
-        // Block number 114779178 is 13-01-2023
-        vm.createSelectFork(vm.envString("OPTIMISM_RPC_URL"), 114779178);
+        // Block number 114965363 is 17-01-2023
+        vm.createSelectFork(vm.envString("OPTIMISM_RPC_URL"), 114965363);
 
-        vm.prank(admin);
-        proxy.upgradeToAndCall(
-            address(implementation),
-            abi.encodeWithSignature("_correctStateForPreviousApprovalProposals()" /* hex"10451e87" */ )
-        );
+        // vm.prank(admin);
+        // proxy.upgradeToAndCall(
+        //     address(implementation),
+        //     abi.encodeWithSignature("_correctStateForPreviousApprovalProposals()" /* hex"10451e87" */ )
+        // );
+        // proxy.upgradeTo(address(implementation));
+        // governor._correctStateForPreviousApprovalProposals();
 
-        vm.startPrank(manager);
-        OptimismGovernorV5(governor).setModuleApproval(address(approvalModule), true);
-        OptimismGovernorV5(governor).setModuleApproval(address(optimisticModule), true);
-        configurator.setProposalType(0, 3000, 5000, "Default");
-        configurator.setProposalType(1, 0, 0, "Optimistic");
-        configurator.setProposalType(2, 3000, 7500, "Super majority");
+        // vm.startPrank(manager);
+        // OptimismGovernorV5(governor).setModuleApproval(address(approvalModule), true);
+        // OptimismGovernorV5(governor).setModuleApproval(address(optimisticModule), true);
+        // configurator.setProposalType(0, 3000, 5000, "Default");
+        // configurator.setProposalType(1, 3000, 7500, "Super majority");
+        // configurator.setProposalType(2, 0, 0, "Optimistic");
 
-        vm.stopPrank();
+        // vm.stopPrank();
 
         // Upgrade alligator
-        address deployer = vm.rememberKey(vm.envUint("DEPLOYER_KEY"));
+        // address deployer = vm.rememberKey(vm.envUint("DEPLOYER_KEY"));
 
-        vm.startBroadcast(deployer);
-        alligatorProxy.upgradeTo(newAlligatorImpl);
-        vm.stopBroadcast();
+        SubdelegationRulesV3 memory rules = SubdelegationRulesV3(255, 0, 0, 0, address(0), AllowanceType.Absolute, 1e20);
+        vm.startPrank(admin);
+        ERC20Votes(op).delegate(alligatorProxy.proxyAddress(admin));
+        alligatorProxy.subdelegate(manager, rules);
+        vm.stopPrank();
+
+        // vm.startBroadcast(deployer);
+        // alligatorProxy.upgradeTo(newAlligatorImpl);
+        // vm.stopBroadcast();
     }
 
     function testReinitializer() public {
@@ -124,7 +132,10 @@ contract OptimismGovernorV6UpgradeTest is Test {
     }
 
     function testAlligator() public {
-        SubdelegationRulesV3 memory rules = SubdelegationRulesV3(255, 0, 0, 0, address(0), AllowanceType.Absolute, 1e20);
+        vm.startPrank(admin);
+        ERC20Votes(op).delegate(alligatorProxy.proxyAddress(admin));
+        vm.stopPrank();
+
         address[] memory targets = new address[](1);
         targets[0] = address(this);
         uint256[] memory values = new uint256[](1);
@@ -134,11 +145,6 @@ contract OptimismGovernorV6UpgradeTest is Test {
         address[] memory authority = new address[](2);
         authority[0] = admin;
         authority[1] = manager;
-
-        vm.startPrank(admin);
-        ERC20Votes(op).delegate(alligatorProxy.proxyAddress(admin));
-        alligatorProxy.subdelegate(manager, rules);
-        vm.stopPrank();
 
         vm.startPrank(manager);
         uint256 proposalId = governor.propose(targets, values, calldatas, "Test");
@@ -170,10 +176,10 @@ contract OptimismGovernorV6UpgradeTest is Test {
 
         vm.startPrank(manager);
 
-        governor.proposeWithModule(optimisticModule, proposalData, "Optimistic", 1);
+        governor.proposeWithModule(optimisticModule, proposalData, "Optimistic", 2);
 
         vm.expectRevert();
-        governor.proposeWithModule(optimisticModule, proposalData, "Optimistic 2", 2);
+        governor.proposeWithModule(optimisticModule, proposalData, "Optimistic 2", 1);
 
         vm.stopPrank();
     }

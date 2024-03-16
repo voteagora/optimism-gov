@@ -92,5 +92,8 @@ interface IAlligatorOPV5 {
 
     function proxyAddress(address owner) external view returns (address endpoint);
 
-    function votesCast(address proxy, uint256 proposalId, address voter) external view returns (uint256 votes);
+    function votesCast(address proxy, uint256 proposalId, address delegator, address delegate)
+        external
+        view
+        returns (uint256 votes);
 }

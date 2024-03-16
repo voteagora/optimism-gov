@@ -8,8 +8,8 @@
   },
   "dev": {
     "governor": "0x6E17cdef2F7c1598AD9DfA9A8acCF84B1303f43f",
-    "governorImplementation": "0x550295d6619437f5B631458a31C17e3093E5d89F",
-    "alligator": "",
+    "governorImplementation": "0xab060957F6d07a1D0DEd231c9Bda71c8891f3C46",
+    "alligator": "0xfD6be5F4253Aa9fBB46B2BFacf9aa6F89822f4a6",
     "proposalTypesConfigurator": "0x54c943f19c2E983926E2d8c060eF3a956a653aA7",
     "votableSupplyOracle": "0x1b7CA7437748375302bAA8954A2447fC3FBE44CC"
   },
