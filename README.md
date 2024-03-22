@@ -2,7 +2,7 @@
 
 ## Motivation
 
-Agora's governor powers commmunities like Optimism, helping the collective move towards onchain governance. The initial version of the governance system is used for signalling purposes only and is designed to be upgraded in the future.
+Agora's governor powers communities like Optimism, helping the collective move towards onchain governance. The initial version of the governance system is used for signalling purposes only and is designed to be upgraded in the future.
 
 ## Overview
 
